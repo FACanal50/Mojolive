@@ -80,3 +80,6 @@ schemes:
     build:
       targets:
         MojoLive: all
+    test:
+      targets:
+        - MojoLiveTests
