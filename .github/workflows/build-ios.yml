@@ -1,0 +1,171 @@
+# =============================================================================
+#  MojoLive — Compilación iOS en la nube (GitHub Actions, macOS)
+#
+#  Qué hace en cada push a main (o al tocar "Run workflow"):
+#    1. Selecciona la última versión estable de Xcode del runner.
+#    2. Instala xcodegen (cmake ya viene en la imagen).
+#    3. Compila libsrt + mbedTLS → Vendor/libsrt.xcframework
+#       (queda en caché: solo se recompila si cambia el script o las versiones).
+#    4. Genera MojoLive.xcodeproj con xcodegen.
+#    5. Compila la app para iPhone (Release, SIN firmar) y arma MojoLive-unsigned.ipa.
+#    6. Corre los tests unitarios en el simulador.
+#    7. Publica la .ipa y los logs como "Artifacts" descargables.
+#
+#  La .ipa sin firmar se instala en el iPhone desde Windows con Sideloadly
+#  (ver README → "Compilar en la nube").
+# =============================================================================
+name: Build iOS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:          # botón "Run workflow" en la pestaña Actions
+
+# Si subís dos cambios seguidos, se cancela la compilación vieja (ahorra minutos).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SRT_VERSION: v1.5.4
+  MBEDTLS_VERSION: v3.6.2
+  IOS_MIN: "16.0"
+  INCLUDE_X86_SIM: "0"        # los runners son Apple Silicon: no hace falta el simulador Intel
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
+
+jobs:
+  build:
+    name: Compilar MojoLive
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Seleccionar Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Instalar herramientas (xcodegen, cmake)
+        run: |
+          brew install xcodegen
+          command -v cmake >/dev/null || brew install cmake
+          xcodebuild -version
+          xcodegen --version
+          cmake --version | head -1
+
+      # ----------------------------------------------------------------------
+      #  libsrt: se compila una vez y queda en caché (~6–8 min la primera vez)
+      # ----------------------------------------------------------------------
+      - name: Restaurar libsrt desde caché
+        id: cache-srt
+        uses: actions/cache@v4
+        with:
+          path: Vendor/libsrt.xcframework
+          key: libsrt-${{ runner.os }}-${{ env.SRT_VERSION }}-${{ env.MBEDTLS_VERSION }}-ios${{ env.IOS_MIN }}-${{ hashFiles('Scripts/build-libsrt.sh') }}
+
+      - name: Compilar libsrt + mbedTLS
+        if: steps.cache-srt.outputs.cache-hit != 'true'
+        run: bash ./Scripts/build-libsrt.sh     # "bash" explícito: Windows no conserva el permiso +x
+
+      - name: Verificar XCFramework
+        run: |
+          test -f Vendor/libsrt.xcframework/Info.plist
+          find Vendor/libsrt.xcframework -name "*.a" -exec lipo -info {} \;
+
+      # ----------------------------------------------------------------------
+      #  Proyecto Xcode
+      # ----------------------------------------------------------------------
+      - name: Generar proyecto con xcodegen
+        run: xcodegen generate --spec project.yml
+
+      - name: Compilar app para iPhone (Release, sin firmar)
+        run: |
+          set -o pipefail
+          mkdir -p build/logs
+          xcodebuild build \
+            -project MojoLive.xcodeproj \
+            -scheme MojoLive \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            2>&1 | tee build/logs/xcodebuild-device.log | grep -E "error:|warning: .*deprecated|BUILD (SUCCEEDED|FAILED)" || true
+          # pipefail + tee: el estado real lo da xcodebuild
+          grep -q "BUILD SUCCEEDED" build/logs/xcodebuild-device.log
+
+      - name: Empaquetar .ipa sin firmar
+        run: |
+          APP=build/DerivedData/Build/Products/Release-iphoneos/MojoLive.app
+          test -d "$APP"
+          rm -rf build/ipa && mkdir -p build/ipa/Payload
+          cp -R "$APP" build/ipa/Payload/
+          (cd build/ipa && zip -qry ../MojoLive-unsigned.ipa Payload)
+          ls -lh build/MojoLive-unsigned.ipa
+
+      - name: Publicar .ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: MojoLive-unsigned-ipa-${{ github.run_number }}
+          path: build/MojoLive-unsigned.ipa
+          retention-days: 14
+
+      # ----------------------------------------------------------------------
+      #  Tests unitarios (simulador)
+      # ----------------------------------------------------------------------
+      - name: Tests unitarios en simulador
+        run: |
+          set -o pipefail
+          SIM_ID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devs = json.load(sys.stdin)["devices"]
+          for runtime in sorted(devs, reverse=True):
+              if ".iOS-" in runtime:
+                  for d in devs[runtime]:
+                      if d["name"].startswith("iPhone"):
+                          print(d["udid"]); sys.exit(0)
+          sys.exit(1)')
+          echo "Simulador: $SIM_ID"
+          xcodebuild test \
+            -project MojoLive.xcodeproj \
+            -scheme MojoLive \
+            -destination "id=$SIM_ID" \
+            -derivedDataPath build/DerivedData-sim \
+            -resultBundlePath build/TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee build/logs/xcodebuild-tests.log | grep -E "error:|Test Case .*(passed|failed)|TEST (SUCCEEDED|FAILED)" || true
+          grep -q "TEST SUCCEEDED" build/logs/xcodebuild-tests.log
+
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo "## MojoLive — build #${{ github.run_number }}"
+            echo ""
+            echo "- Xcode: \`$(xcodebuild -version | head -1)\`"
+            echo "- SRT ${{ env.SRT_VERSION }} + mbedTLS ${{ env.MBEDTLS_VERSION }} (caché: ${{ steps.cache-srt.outputs.cache-hit == 'true' && 'sí' || 'no' }})"
+            if [ -f build/MojoLive-unsigned.ipa ]; then
+              echo "- ✅ IPA: \`MojoLive-unsigned.ipa\` ($(du -h build/MojoLive-unsigned.ipa | cut -f1)) — descargala en **Artifacts**, abajo"
+            else
+              echo "- ❌ No se generó la IPA. Errores de compilación:"
+              echo '```'
+              grep -E "error:" build/logs/xcodebuild-device.log 2>/dev/null | sort -u | head -40 || true
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publicar logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ github.run_number }}
+          path: build/logs/
+          retention-days: 7
+          if-no-files-found: ignore

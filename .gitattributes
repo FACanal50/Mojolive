@@ -1,0 +1,7 @@
+# Forzar finales de línea LF (Unix) aunque el repo se edite/suba desde Windows.
+# Sin esto, Git en Windows puede convertir los .sh a CRLF y el runner de macOS falla
+# con "/usr/bin/env: bash\r: No such file or directory".
+* text=auto eol=lf
+*.png binary
+*.a binary
+*.ipa binary

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>es</string>
+	<key>CFBundleDisplayName</key>
+	<string>MojoLive</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+
+	<!-- Permisos -->
+	<key>NSCameraUsageDescription</key>
+	<string>MojoLive usa la cámara para capturar y transmitir video en vivo.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>MojoLive usa el micrófono para capturar y transmitir el audio de la nota.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>MojoLive necesita la red local para transmitir por SRT a equipos de la redacción o recibir conexiones en modo Listener.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>MojoLive accede a tus imágenes para elegir el logo del canal (PNG con transparencia).</string>
+
+	<!-- Producción: siempre horizontal, pantalla completa, sin barra de estado -->
+	<key>UIRequiresFullScreen</key>
+	<true/>
+	<key>UIStatusBarHidden</key>
+	<true/>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+	</dict>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+		<string>metal</string>
+		<string>video-camera</string>
+		<string>microphone</string>
+	</array>
+	<!-- Mantener el audio vivo si la app pasa a segundo plano durante la transmisión -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+</dict>
+</plist>

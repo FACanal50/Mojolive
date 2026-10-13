@@ -1,0 +1,6 @@
+build/
+Vendor/libsrt.xcframework/
+*.xcodeproj/
+DerivedData/
+xcuserdata/
+.DS_Store
