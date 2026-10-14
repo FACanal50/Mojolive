@@ -1,5 +1,5 @@
 # =============================================================================
-#   AF Live — Compilación iOS en la nube (GitHub Actions, macOS)
+#   MojoLive — Compilación iOS en la nube (GitHub Actions, macOS)
 # =============================================================================
 name: Build iOS
 
@@ -23,7 +23,7 @@ env:
 
 jobs:
   build:
-    name: Compilar AF Live
+    name: Compilar MojoLive
     runs-on: macos-15
     timeout-minutes: 60
 
@@ -68,8 +68,8 @@ jobs:
           set -o pipefail
           mkdir -p build/logs
           xcodebuild build \
-            -project AFLive.xcodeproj \
-            -scheme AFLive \
+            -project MojoLive.xcodeproj \
+            -scheme MojoLive \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
@@ -82,18 +82,18 @@ jobs:
 
       - name: Empaquetar .ipa sin firmar
         run: |
-          APP=build/DerivedData/Build/Products/Release-iphoneos/AF\ Live.app
+          APP=build/DerivedData/Build/Products/Release-iphoneos/MojoLive.app
           test -d "$APP"
           rm -rf build/ipa && mkdir -p build/ipa/Payload
           cp -R "$APP" build/ipa/Payload/
-          (cd build/ipa && zip -qry ../AFLive-unsigned.ipa Payload)
-          ls -lh build/AFLive-unsigned.ipa
+          (cd build/ipa && zip -qry ../MojoLive-unsigned.ipa Payload)
+          ls -lh build/MojoLive-unsigned.ipa
 
       - name: Publicar .ipa
         uses: actions/upload-artifact@v4
         with:
-          name: AFLive-unsigned-ipa-${{ github.run_number }}
-          path: build/AFLive-unsigned.ipa
+          name: MojoLive-unsigned-ipa-${{ github.run_number }}
+          path: build/MojoLive-unsigned.ipa
           retention-days: 14
 
       - name: Tests unitarios en simulador
@@ -110,8 +110,8 @@ jobs:
           sys.exit(1)')
           echo "Simulador: $SIM_ID"
           xcodebuild test \
-            -project AFLive.xcodeproj \
-            -scheme AFLive \
+            -project MojoLive.xcodeproj \
+            -scheme MojoLive \
             -destination "id=$SIM_ID" \
             -derivedDataPath build/DerivedData-sim \
             -resultBundlePath build/TestResults.xcresult \
@@ -123,12 +123,12 @@ jobs:
         if: always()
         run: |
           {
-            echo "## AF Live — build #${{ github.run_number }}"
+            echo "## MojoLive — build #${{ github.run_number }}"
             echo ""
             echo "- Xcode: \`$(xcodebuild -version | head -1)\`"
             echo "- SRT ${{ env.SRT_VERSION }} + mbedTLS ${{ env.MBEDTLS_VERSION }} (caché: ${{ steps.cache-srt.outputs.cache-hit == 'true' && 'sí' || 'no' }})"
-            if [ -f build/AFLive-unsigned.ipa ]; then
-              echo "- ✅ IPA: \`AFLive-unsigned.ipa\` ($(du -h build/AFLive-unsigned.ipa | cut -f1)) — descargala en **Artifacts**, abajo"
+            if [ -f build/MojoLive-unsigned.ipa ]; then
+              echo "- ✅ IPA: \`MojoLive-unsigned.ipa\` ($(du -h build/MojoLive-unsigned.ipa | cut -f1)) — descargala en **Artifacts**, abajo"
             else
               echo "- ❌ No se generó la IPA. Errores de compilación:"
               echo '```'
