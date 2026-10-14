@@ -70,12 +70,12 @@ final class ProductionViewModel: ObservableObject {
 
         // Vúmetro a 30 Hz
         Timer.publish(every: 1.0 / 30, on: .main, in: .common).autoconnect()
-            .sink { [weak self] _ in self?.tickMeter() }
-            .store(in: &timers)
+        .sink { [weak self] _ in self?.tickMeter() }
+        .store(in: &timers)
         // Lectura de cámara a 4 Hz (valores en automático)
         Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
-            .sink { [weak self] _ in self?.tickReadout() }
-            .store(in: &timers)
+        .sink { [weak self] _ in self?.tickReadout() }
+        .store(in: &timers)
 
         NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)
             .receive(on: DispatchQueue.main)
@@ -273,7 +273,7 @@ struct MeterBallistics: Equatable {
     static let floor: Float = -60
     static let releaseDBPerSecond: Float = 20
 
-    mutating func update(with levels: AudioLevels, dt: Double) {
+     mutating func update(with levels: AudioLevels, dt: Double) {
         let fall = Self.releaseDBPerSecond * Float(dt)
         for ch in 0..<2 {
             let inRMS = max(levels.rms[ch], Self.floor)
