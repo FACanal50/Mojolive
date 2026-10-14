@@ -61,7 +61,10 @@ jobs:
           find Vendor/libsrt.xcframework -name "*.a" -exec lipo -info {} \;
 
       - name: Generar proyecto con xcodegen
-        run: xcodegen generate --spec proyecto.yml
+        run: |
+          SPEC_FILE=$(find . -name "proyecto.yml" -o -name "project.yml" | head -n 1)
+          echo "Usando spec: $SPEC_FILE"
+          xcodegen generate --spec "$SPEC_FILE"
 
       - name: Compilar app para iPhone (Release, sin firmar)
         run: |
