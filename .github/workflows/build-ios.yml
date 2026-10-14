@@ -61,7 +61,7 @@ jobs:
           find Vendor/libsrt.xcframework -name "*.a" -exec lipo -info {} \;
 
       - name: Generar proyecto con xcodegen
-        run: xcodegen generate --spec proyecto.yml --project .
+        run: xcodegen generate --spec proyecto.yml
 
       - name: Compilar app para iPhone (Release, sin firmar)
         run: |
