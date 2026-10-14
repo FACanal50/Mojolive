@@ -1,12 +1,12 @@
 # ---------------------------------------------------------------------------
-# MojoLive — Proyecto Xcode generado con XcodeGen (https://github.com/yonaskolb/XcodeGen)
+# AF Live — Proyecto Xcode generado con XcodeGen (https://github.com/yonaskolb/XcodeGen)
 #
 #   brew install xcodegen cmake
 #   ./Scripts/build-libsrt.sh        # compila libsrt + mbedTLS -> Vendor/libsrt.xcframework
-#   xcodegen generate                # genera MojoLive.xcodeproj
-#   open MojoLive.xcodeproj
+#   xcodegen generate                # genera AFLive.xcodeproj
+#   open AFLive.xcodeproj
 # ---------------------------------------------------------------------------
-name: MojoLive
+name: AFLive
 
 options:
   bundleIdPrefix: coop.coopmorteros
@@ -25,7 +25,7 @@ settings:
     CLANG_CXX_LANGUAGE_STANDARD: "c++17"
 
 targets:
-  MojoLive:
+  AFLive:
     type: application
     platform: iOS
     sources:
@@ -34,8 +34,8 @@ targets:
           - "**/*.md"
     dependencies:
       - framework: Vendor/libsrt.xcframework
-        embed: false               # librería estática: se linkea, no se embebe
-      - sdk: libc++.tbd            # libsrt está escrita en C++
+        embed: false                 # librería estática: se linkea, no se embebe
+      - sdk: libc++.tbd              # libsrt está escrita en C++
       - sdk: AVFoundation.framework
       - sdk: VideoToolbox.framework
       - sdk: CoreMedia.framework
@@ -47,8 +47,8 @@ targets:
       - sdk: Network.framework
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: coop.coopmorteros.mojolive
-        PRODUCT_NAME: MojoLive
+        PRODUCT_BUNDLE_IDENTIFIER: coop.coopmorteros.aflive
+        PRODUCT_NAME: "AF Live"
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -56,30 +56,30 @@ targets:
         INFOPLIST_FILE: MojoLive/Resources/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         OTHER_LDFLAGS: ["-lc++"]
-        INFOPLIST_KEY_NSCameraUsageDescription: "MojoLive requiere acceso a la cámara para la transmisión de video en vivo."
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: "MojoLive requiere acceso al micrófono para capturar audio en el streaming."
-        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "MojoLive requiere acceso a la red local para conectarse a servidores SRT."
+        INFOPLIST_KEY_NSCameraUsageDescription: "AF Live requiere acceso a la cámara para la transmisión de video en vivo."
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "AF Live requiere acceso al micrófono para capturar audio en el streaming."
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "AF Live requiere acceso a la red local para conectarse a servidores SRT."
         INFOPLIST_KEY_UIBackgroundModes: ["audio"]
 
-  MojoLiveTests:
+  AFLiveTests:
     type: bundle.unit-test
     platform: iOS
     sources:
       - path: MojoLiveTests
     dependencies:
-      - target: MojoLive
+      - target: AFLive
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
         HEADER_SEARCH_PATHS: ["$(inherited)", "$(BUILT_PRODUCTS_DIR)/include"]
         BUNDLE_LOADER: "$(TEST_HOST)"
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MojoLive.app/MojoLive"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/AF Live.app/AF Live"
 
 schemes:
-  MojoLive:
+  AFLive:
     build:
       targets:
-        MojoLive: all
+        AFLive: all
     test:
       targets:
-        - MojoLiveTests
+        - AFLiveTests
