@@ -1,19 +1,14 @@
 //
 //  BroadcastPipeline.swift
-//  AFLive — Módulo 1
+//  MojoLive — Módulo 1
 //
 //  Orquestador del flujo completo. No contiene lógica de UI.
 //
 //   Cámara ──► FrameCompositor (zócalo/logo en GPU) ──┬──► Preview de programa
 //                                                    └──► VideoEncoder (H.264/HEVC) ─┐
-//   Micrófono ──► AudioCaptureEngine ──┬──► Vúmetro                                    ├──► TSMuxer ──► SRTTransport
-//                                      └──► AACEncoder ──────────────────────────────┘        ▲
-//                                                       AdaptiveBitrateController ◄── stats ┘
-//
-//  Colas:
-//   camera.videoQueue  — composición + submit al encoder + preview
-//   tap de audio       — medición + submit al encoder AAC
-//   muxQueue           — TS mux + envío SRT (serial, único dueño del muxer)
+//   Micrófono ──► AudioCaptureEngine ──┬──► Vúmetro                                 ├──► TSMuxer ──► SRTTransport
+//                                      └──► AACEncoder ──────────────────────────────┘         ▲
+//                                                         AdaptiveBitrateController ◄── stats ┘
 //
 
 import AVFoundation
@@ -31,7 +26,7 @@ struct LiveStatus: Equatable {
 
 final class BroadcastPipeline {
 
-    // Componentes (expuestos para que el ViewModel acceda a controles específicos)
+    // Componentes
     let camera = CameraController()
     let audio = AudioCaptureEngine()
     let compositor = FrameCompositor()
@@ -41,7 +36,7 @@ final class BroadcastPipeline {
     private var muxer: TSMuxer?
     private var abr: AdaptiveBitrateController?
 
-    private let muxQueue = DispatchQueue(label: "coop.coopmorteros.aflive.mux", qos: .userInteractive)
+    private let muxQueue = DispatchQueue(label: "coop.coopmorteros.mojolive.mux", qos: .userInteractive)
     private let stateLock = NSLock()
     private var _isLive = false
     private(set) var profile = VideoProfile()
@@ -54,9 +49,7 @@ final class BroadcastPipeline {
 
     // MARK: Salidas hacia la UI
 
-    /// Frame de programa (con gráfica) para la vista previa. Se llama en la cola de video.
     var previewHandler: ((CMSampleBuffer) -> Void)?
-    /// Estado de transmisión. Main thread.
     var statusHandler: ((LiveStatus) -> Void)?
     private var status = LiveStatus()
 
@@ -69,7 +62,7 @@ final class BroadcastPipeline {
         wire()
     }
 
-    // MARK: Preparación (cámara + audio, sin transmitir)
+    // MARK: Preparación
 
     func prepare(profile: VideoProfile, lens: CameraLens) async throws {
         guard await AudioCaptureEngine.requestAccess() else {
@@ -84,7 +77,6 @@ final class BroadcastPipeline {
         camera.start()
     }
 
-    /// Cambio de lente o de perfil (no permitido al aire: el receptor vería un cambio de formato).
     func reconfigure(profile: VideoProfile, lens: CameraLens) async throws {
         guard !isLive else { return }
         try await camera.configure(profile: profile, lens: lens)
@@ -93,7 +85,6 @@ final class BroadcastPipeline {
         compositor.configure(width: Int(dims.width), height: Int(dims.height), fps: profile.frameRate)
     }
 
-    /// Cambio de lente al aire: misma resolución/fps, solo cambia el dispositivo.
     func switchLens(_ lens: CameraLens) async throws {
         try await camera.configure(profile: profile, lens: lens)
         videoEncoder.requestKeyframe()
@@ -115,7 +106,7 @@ final class BroadcastPipeline {
         audioEncoder.start()
 
         let mux = TSMuxer(videoStreamType: profile.codec.mpegTSStreamType, hasAudio: true)
-        mux.outputHandler = { [weak self] data in self?.srt.send(data) }   // corre en muxQueue
+        mux.outputHandler = { [weak self] data in self?.srt.send(data) }
         muxQueue.sync { muxer = mux }
 
         abr = config.adaptiveBitrate
@@ -147,7 +138,7 @@ final class BroadcastPipeline {
     // MARK: Cableado interno
 
     private func wire() {
-        // VIDEO: cámara → compositor → preview + encoder (protegido con autoreleasepool para evitar fugas de memoria)
+        // VIDEO: cámara → compositor → preview + encoder
         camera.videoHandler = { [weak self] sample in
             autoreleasepool {
                 guard let self, let pixelBuffer = CMSampleBufferGetImageBuffer(sample) else { return }
@@ -162,7 +153,7 @@ final class BroadcastPipeline {
             }
         }
 
-        // AUDIO: tap → encoder AAC (protegido con autoreleasepool)
+        // AUDIO: tap → encoder AAC
         audio.pcmHandler = { [weak self] buffer, pts in
             autoreleasepool {
                 guard let self, self.isLive else { return }
@@ -170,20 +161,28 @@ final class BroadcastPipeline {
             }
         }
 
-        // Encoders → muxer (cola serial)
+        // Encoders → muxer (cola serial protegida con autoreleasepool para evitar fugas en streaming prolongado)
         videoEncoder.outputHandler = { [weak self] frame in
             guard let self else { return }
-            self.muxQueue.async { self.muxer?.muxVideo(frame) }
+            self.muxQueue.async {
+                autoreleasepool {
+                    self.muxer?.muxVideo(frame)
+                }
+            }
         }
+        
         audioEncoder.outputHandler = { [weak self] frame in
             guard let self else { return }
-            self.muxQueue.async { self.muxer?.muxAudio(frame) }
+            self.muxQueue.async {
+                autoreleasepool {
+                    self.muxer?.muxAudio(frame)
+                }
+            }
         }
 
         // SRT → estado / estadísticas / ABR
         srt.connectedHandler = { [weak self] in
             guard let self else { return }
-            // Nueva conexión: reiniciar timeline TS y forzar IDR para arranque inmediato del decoder.
             self.muxQueue.async { self.muxer?.reset() }
             self.videoEncoder.requestKeyframe()
         }
@@ -224,6 +223,6 @@ final class BroadcastPipeline {
     }
 
     private func publishStatus() {
-        statusHandler?(status)   // ya en main (los handlers de SRT publican en main)
+        statusHandler?(status)
     }
 }
