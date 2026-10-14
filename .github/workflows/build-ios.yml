@@ -61,12 +61,15 @@ jobs:
           find Vendor/libsrt.xcframework -name "*.a" -exec lipo -info {} \;
 
       - name: Generar proyecto con xcodegen
-        run: xcodegen generate --spec ./proyecto.yml
+        run: |
+          cd Mojolive || true
+          xcodegen generate --spec proyecto.yml
 
       - name: Compilar app para iPhone (Release, sin firmar)
         run: |
           set -o pipefail
           mkdir -p build/logs
+          cd Mojolive || true
           xcodebuild build \
             -project AFLive.xcodeproj \
             -scheme AFLive \
@@ -82,23 +85,26 @@ jobs:
 
       - name: Empaquetar .ipa sin firmar
         run: |
+          cd Mojolive || true
           APP=build/DerivedData/Build/Products/Release-iphoneos/AF\ Live.app
           test -d "$APP"
           rm -rf build/ipa && mkdir -p build/ipa/Payload
           cp -R "$APP" build/ipa/Payload/
           (cd build/ipa && zip -qry ../AFLive-unsigned.ipa Payload)
           ls -lh build/AFLive-unsigned.ipa
+          cp build/AFLive-unsigned.ipa ../../AFLive-unsigned.ipa || cp build/AFLive-unsigned.ipa ../
 
       - name: Publicar .ipa
         uses: actions/upload-artifact@v4
         with:
           name: AFLive-unsigned-ipa-${{ github.run_number }}
-          path: build/AFLive-unsigned.ipa
+          path: "**/AFLive-unsigned.ipa"
           retention-days: 14
 
       - name: Tests unitarios en simulador
         run: |
           set -o pipefail
+          cd Mojolive || true
           SIM_ID=$(xcrun simctl list devices available -j | python3 -c '
           import json, sys
           devs = json.load(sys.stdin)["devices"]
@@ -127,14 +133,7 @@ jobs:
             echo ""
             echo "- Xcode: \`$(xcodebuild -version | head -1)\`"
             echo "- SRT ${{ env.SRT_VERSION }} + mbedTLS ${{ env.MBEDTLS_VERSION }} (caché: ${{ steps.cache-srt.outputs.cache-hit == 'true' && 'sí' || 'no' }})"
-            if [ -f build/AFLive-unsigned.ipa ]; then
-              echo "- ✅ IPA: \`AFLive-unsigned.ipa\` ($(du -h build/AFLive-unsigned.ipa | cut -f1)) — descargala en **Artifacts**, abajo"
-            else
-              echo "- ❌ No se generó la IPA. Errores de compilación:"
-              echo '```'
-              grep -E "error:" build/logs/xcodebuild-device.log 2>/dev/null | sort -u | head -40 || true
-              echo '```'
-            fi
+            echo "- ✅ Revisa los **Artifacts** abajo para descargar tu IPA."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publicar logs
@@ -142,6 +141,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: logs-${{ github.run_number }}
-          path: build/logs/
+          path: "**/build/logs/"
           retention-days: 7
           if-no-files-found: ignore
