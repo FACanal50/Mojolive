@@ -138,7 +138,7 @@ final class BroadcastPipeline {
     // MARK: Cableado interno
 
     private func wire() {
-        // VIDEO: cámara → compositor → preview + encoder
+        // VIDEO: cámara → compositor → preview + encoder (protegido con autoreleasepool)
         camera.videoHandler = { [weak self] sample in
             autoreleasepool {
                 guard let self, let pixelBuffer = CMSampleBufferGetImageBuffer(sample) else { return }
@@ -153,7 +153,7 @@ final class BroadcastPipeline {
             }
         }
 
-        // AUDIO: tap → encoder AAC
+        // AUDIO: tap → encoder AAC (protegido con autoreleasepool)
         audio.pcmHandler = { [weak self] buffer, pts in
             autoreleasepool {
                 guard let self, self.isLive else { return }
