@@ -2,7 +2,7 @@
 //  ProductionViewModel.swift
 //  MojoLive — Módulo 1
 //
-//  Puente entre la UI (SwiftUI) y el BroadcastPipeline. Todo lo publicado aquí
+//  Puente entre la UI (SwiftUI) y le BroadcastPipeline. Todo lo publicado aquí
 //  vive en el main actor; el pipeline trabaja en sus propias colas.
 //
 
@@ -88,12 +88,16 @@ final class ProductionViewModel: ObservableObject {
         pipeline.previewHandler = { sample in sink.enqueue(sample) }
     }
 
-    // MARK: Arranque
+    // MARK: Arranque seguro en segundo plano
 
     func start() async {
         guard !isReady else { return }
         do {
-            try await pipeline.prepare(profile: profile, lens: lens)
+            // Desplazamos la inicialización pesada del hardware fuera de la sincronía estricta del main thread
+            try await Task.detached(priority: .userInitiated) { [profile, lens, pipeline] in
+                try await pipeline.prepare(profile: profile, lens: lens)
+            }.value
+
             capabilities = pipeline.camera.capabilities
             refreshAudioInputs()
             inputGain = pipeline.audio.inputGain
@@ -217,7 +221,6 @@ final class ProductionViewModel: ObservableObject {
     func selectAudioInput(_ option: AudioInputOption) {
         do {
             try pipeline.audio.selectInput(option)
-            // La ruta se actualiza de forma asíncrona; refrescamos tras un instante.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.refreshAudioInputs() }
         } catch {
             errorMessage = "No se pudo seleccionar \(option.name): \(error.localizedDescription)"
@@ -260,7 +263,6 @@ final class ProductionViewModel: ObservableObject {
 
 // MARK: - Balística del vúmetro
 
-/// Comportamiento tipo PPM: ataque instantáneo, caída 20 dB/s, peak-hold 1,5 s, clip latcheado 2 s.
 struct MeterBallistics: Equatable {
     var rms: [Float] = [-60, -60]
     var peak: [Float] = [-60, -60]
