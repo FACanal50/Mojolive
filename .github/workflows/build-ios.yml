@@ -1,18 +1,18 @@
 # =============================================================================
-#  MojoLive — Compilación iOS en la nube (GitHub Actions, macOS)
+#   AF Live — Compilación iOS en la nube (GitHub Actions, macOS)
 #
-#  Qué hace en cada push a main (o al tocar "Run workflow"):
-#    1. Selecciona la última versión estable de Xcode del runner.
-#    2. Instala xcodegen (cmake ya viene en la imagen).
-#    3. Compila libsrt + mbedTLS → Vendor/libsrt.xcframework
-#       (queda en caché: solo se recompila si cambia el script o las versiones).
-#    4. Genera MojoLive.xcodeproj con xcodegen.
-#    5. Compila la app para iPhone (Release, SIN firmar) y arma MojoLive-unsigned.ipa.
-#    6. Corre los tests unitarios en el simulador.
-#    7. Publica la .ipa y los logs como "Artifacts" descargables.
+#   Qué hace en cada push a main (o al tocar "Run workflow"):
+#     1. Selecciona la última versión estable de Xcode del runner.
+#     2. Instala xcodegen (cmake ya viene en la imagen).
+#     3. Compila libsrt + mbedTLS → Vendor/libsrt.xcframework
+#        (queda en caché: solo se recompila si cambia el script o las versiones).
+#     4. Genera AFLive.xcodeproj con xcodegen.
+#     5. Compila la app para iPhone (Release, SIN firmar) y arma AFLive-unsigned.ipa.
+#     6. Corre los tests unitarios en el simulador.
+#     7. Publica la .ipa y los logs como "Artifacts" descargables.
 #
-#  La .ipa sin firmar se instala en el iPhone desde Windows con Sideloadly
-#  (ver README → "Compilar en la nube").
+#   La .ipa sin firmar se instala en el iPhone desde Windows con Sideloadly
+#   (ver README → "Compilar en la nube").
 # =============================================================================
 name: Build iOS
 
@@ -37,7 +37,7 @@ env:
 
 jobs:
   build:
-    name: Compilar MojoLive
+    name: Compilar AF Live
     runs-on: macos-15
     timeout-minutes: 60
 
@@ -59,7 +59,7 @@ jobs:
           cmake --version | head -1
 
       # ----------------------------------------------------------------------
-      #  libsrt: se compila una vez y queda en caché (~6–8 min la primera vez)
+      #   libsrt: se compila una vez y queda en caché (~6–8 min la primera vez)
       # ----------------------------------------------------------------------
       - name: Restaurar libsrt desde caché
         id: cache-srt
@@ -78,7 +78,7 @@ jobs:
           find Vendor/libsrt.xcframework -name "*.a" -exec lipo -info {} \;
 
       # ----------------------------------------------------------------------
-      #  Proyecto Xcode
+      #   Proyecto Xcode
       # ----------------------------------------------------------------------
       - name: Generar proyecto con xcodegen
         run: xcodegen generate --spec project.yml
@@ -88,8 +88,8 @@ jobs:
           set -o pipefail
           mkdir -p build/logs
           xcodebuild build \
-            -project MojoLive.xcodeproj \
-            -scheme MojoLive \
+            -project AFLive.xcodeproj \
+            -scheme AFLive \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
@@ -103,22 +103,22 @@ jobs:
 
       - name: Empaquetar .ipa sin firmar
         run: |
-          APP=build/DerivedData/Build/Products/Release-iphoneos/MojoLive.app
+          APP=build/DerivedData/Build/Products/Release-iphoneos/AF\ Live.app
           test -d "$APP"
           rm -rf build/ipa && mkdir -p build/ipa/Payload
           cp -R "$APP" build/ipa/Payload/
-          (cd build/ipa && zip -qry ../MojoLive-unsigned.ipa Payload)
-          ls -lh build/MojoLive-unsigned.ipa
+          (cd build/ipa && zip -qry ../AFLive-unsigned.ipa Payload)
+          ls -lh build/AFLive-unsigned.ipa
 
       - name: Publicar .ipa
         uses: actions/upload-artifact@v4
         with:
-          name: MojoLive-unsigned-ipa-${{ github.run_number }}
-          path: build/MojoLive-unsigned.ipa
+          name: AFLive-unsigned-ipa-${{ github.run_number }}
+          path: build/AFLive-unsigned.ipa
           retention-days: 14
 
       # ----------------------------------------------------------------------
-      #  Tests unitarios (simulador)
+      #   Tests unitarios (simulador)
       # ----------------------------------------------------------------------
       - name: Tests unitarios en simulador
         run: |
@@ -134,8 +134,8 @@ jobs:
           sys.exit(1)')
           echo "Simulador: $SIM_ID"
           xcodebuild test \
-            -project MojoLive.xcodeproj \
-            -scheme MojoLive \
+            -project AFLive.xcodeproj \
+            -scheme AFLive \
             -destination "id=$SIM_ID" \
             -derivedDataPath build/DerivedData-sim \
             -resultBundlePath build/TestResults.xcresult \
@@ -147,12 +147,12 @@ jobs:
         if: always()
         run: |
           {
-            echo "## MojoLive — build #${{ github.run_number }}"
+            echo "## AF Live — build #${{ github.run_number }}"
             echo ""
             echo "- Xcode: \`$(xcodebuild -version | head -1)\`"
             echo "- SRT ${{ env.SRT_VERSION }} + mbedTLS ${{ env.MBEDTLS_VERSION }} (caché: ${{ steps.cache-srt.outputs.cache-hit == 'true' && 'sí' || 'no' }})"
-            if [ -f build/MojoLive-unsigned.ipa ]; then
-              echo "- ✅ IPA: \`MojoLive-unsigned.ipa\` ($(du -h build/MojoLive-unsigned.ipa | cut -f1)) — descargala en **Artifacts**, abajo"
+            if [ -f build/AFLive-unsigned.ipa ]; then
+              echo "- ✅ IPA: \`AFLive-unsigned.ipa\` ($(du -h build/AFLive-unsigned.ipa | cut -f1)) — descargala en **Artifacts**, abajo"
             else
               echo "- ❌ No se generó la IPA. Errores de compilación:"
               echo '```'
