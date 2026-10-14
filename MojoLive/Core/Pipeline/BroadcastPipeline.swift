@@ -1,14 +1,14 @@
 //
 //  BroadcastPipeline.swift
-//  MojoLive — Módulo 1
+//  AFLive — Módulo 1
 //
 //  Orquestador del flujo completo. No contiene lógica de UI.
 //
 //   Cámara ──► FrameCompositor (zócalo/logo en GPU) ──┬──► Preview de programa
-//                                                     └──► VideoEncoder (H.264/HEVC) ─┐
-//   Micrófono ──► AudioCaptureEngine ──┬──► Vúmetro                                   ├──► TSMuxer ──► SRTTransport
+//                                                    └──► VideoEncoder (H.264/HEVC) ─┐
+//   Micrófono ──► AudioCaptureEngine ──┬──► Vúmetro                                    ├──► TSMuxer ──► SRTTransport
 //                                      └──► AACEncoder ──────────────────────────────┘        ▲
-//                                                         AdaptiveBitrateController ◄── stats ┘
+//                                                       AdaptiveBitrateController ◄── stats ┘
 //
 //  Colas:
 //   camera.videoQueue  — composición + submit al encoder + preview
@@ -41,7 +41,7 @@ final class BroadcastPipeline {
     private var muxer: TSMuxer?
     private var abr: AdaptiveBitrateController?
 
-    private let muxQueue = DispatchQueue(label: "mojolive.mux", qos: .userInteractive)
+    private let muxQueue = DispatchQueue(label: "coop.coopmorteros.aflive.mux", qos: .userInteractive)
     private let stateLock = NSLock()
     private var _isLive = false
     private(set) var profile = VideoProfile()
@@ -73,7 +73,7 @@ final class BroadcastPipeline {
 
     func prepare(profile: VideoProfile, lens: CameraLens) async throws {
         guard await AudioCaptureEngine.requestAccess() else {
-            throw CameraError.configurationFailed("Sin permiso de micrófono. Habilitalo en Ajustes > MojoLive.")
+            throw CameraError.configurationFailed("Sin permiso de micrófono. Habilitalo en Ajustes.")
         }
         try audio.configureSession()
         try await camera.configure(profile: profile, lens: lens)
@@ -126,7 +126,7 @@ final class BroadcastPipeline {
         srtConfig = config
         status = LiveStatus(connection: .connecting, videoBitrate: profile.startBitrate)
         stateLock.lock(); _isLive = true; stateLock.unlock()
-        UIApplication.shared.isIdleTimerDisabled = true
+        DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = true }
 
         srt.start(config: config, maxBitrate: profile.maxBitrate)
     }
@@ -147,23 +147,27 @@ final class BroadcastPipeline {
     // MARK: Cableado interno
 
     private func wire() {
-        // VIDEO: cámara → compositor → preview + encoder
+        // VIDEO: cámara → compositor → preview + encoder (protegido con autoreleasepool para evitar fugas de memoria)
         camera.videoHandler = { [weak self] sample in
-            guard let self, let pixelBuffer = CMSampleBufferGetImageBuffer(sample) else { return }
-            let pts = CMSampleBufferGetPresentationTimeStamp(sample)
-            let program = self.compositor.process(pixelBuffer)
+            autoreleasepool {
+                guard let self, let pixelBuffer = CMSampleBufferGetImageBuffer(sample) else { return }
+                let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+                let program = self.compositor.process(pixelBuffer)
 
-            if self.isLive { self.videoEncoder.encode(program, pts: pts) }
-            if let preview = SampleBufferFactory.make(from: program, pts: pts) {
-                self.previewHandler?(preview)
+                if self.isLive { self.videoEncoder.encode(program, pts: pts) }
+                if let preview = SampleBufferFactory.make(from: program, pts: pts) {
+                    self.previewHandler?(preview)
+                }
+                self.countFrame()
             }
-            self.countFrame()
         }
 
-        // AUDIO: tap → encoder AAC (el medidor ya acumula dentro de AudioCaptureEngine)
+        // AUDIO: tap → encoder AAC (protegido con autoreleasepool)
         audio.pcmHandler = { [weak self] buffer, pts in
-            guard let self, self.isLive else { return }
-            self.audioEncoder.encode(buffer, pts: pts)
+            autoreleasepool {
+                guard let self, self.isLive else { return }
+                self.audioEncoder.encode(buffer, pts: pts)
+            }
         }
 
         // Encoders → muxer (cola serial)
@@ -194,7 +198,6 @@ final class BroadcastPipeline {
             if let abr = self.abr, let newRate = abr.update(with: stats) {
                 self.videoEncoder.setBitrate(newRate)
                 self.status.abrReason = abr.lastReason
-                appLog.info("ABR → \(newRate / 1000) kbps (\(abr.lastReason))")
             }
             self.status.videoBitrate = self.videoEncoder.currentBitrate
             self.status.captureFPS = self.measuredFPS
